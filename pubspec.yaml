@@ -39,6 +39,7 @@ dependencies:
   permission_handler: ^11.3.1
   flutter_text_viewer: ^0.0.6
   file_picker: ^8.0.5
+  sqflite: ^2.3.3+1
 
 dev_dependencies:
   flutter_test:
