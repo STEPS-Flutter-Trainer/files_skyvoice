@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +34,9 @@ class TxtFileListView extends StatefulWidget {
 class _TxtFileListViewState extends State<TxtFileListView> {
   final TxtFileController _controller = TxtFileController();
   List<TxtFileModel> txtFiles = [];
-  int? uploadedFileIndex; // Track which file is uploaded
+  String? encodedContent; // Variable to store the encoded content
+  String? decodedContent; // Variable to store the decoded content
+  int? encodedFileIndex; // Track which file is encoded
 
   @override
   void initState() {
@@ -66,17 +69,42 @@ class _TxtFileListViewState extends State<TxtFileListView> {
     }
   }
 
-  void _uploadFile(String filePath, int index) {
-    // Implement your file upload logic here
-    // Show a SnackBar as a placeholder for the upload function
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Upload function not implemented for: $filePath")),
-    );
+  void _encodeFile(String filePath, int index) async {
+    try {
+      final file = File(filePath);
 
-    // Update the uploaded file index to change the button text
-    setState(() {
-      uploadedFileIndex = index; // Mark this file as uploaded
-    });
+      // Use file.readAsBytes() to read the file as bytes
+      final bytes = await file.readAsBytes();
+
+      // Encode the bytes to Base64
+      setState(() {
+        encodedContent = base64Encode(bytes);
+        encodedFileIndex = index; // Mark this file as encoded
+     print(encodedContent);
+      });
+
+      // After encoding, navigate to a new page to display the encoded content
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EncodedFileViewer(encodedContent: encodedContent!),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error reading file: $e")),
+      );
+    }
+  }
+
+
+  void _decodeFile() {
+    if (encodedContent != null) {
+      // Decode the Base64 string back to the original content
+      setState(() {
+        decodedContent = utf8.decode(base64Decode(encodedContent!));
+      });
+    }
   }
 
   @override
@@ -86,21 +114,19 @@ class _TxtFileListViewState extends State<TxtFileListView> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            Navigator.pop(context); // Navigate back when the arrow is pressed
+            Navigator.pop(context);
           },
         ),
         title: const Text("LogFiles", style: TextStyle(color: Colors.white)),
-        iconTheme: IconThemeData(color: Colors.white),
-        backgroundColor: Color(0xFF0C7C3C),
+        backgroundColor: const Color(0xFF0C7C3C),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, size: 30, color: Colors.white), // Set color for the refresh icon
+            icon: const Icon(Icons.refresh, size: 30, color: Colors.white),
             tooltip: 'Refresh List',
-            onPressed: _loadFiles, // Refresh the file list when clicked
+            onPressed: _loadFiles,
           ),
         ],
       ),
-
       body: ListView.builder(
         itemCount: txtFiles.length,
         itemBuilder: (context, index) {
@@ -112,32 +138,61 @@ class _TxtFileListViewState extends State<TxtFileListView> {
               elevation: 2,
               child: Center(
                 child: ListTile(
-                  title: Row( // Use Row to arrange file name and button horizontally
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween, // Distribute space between items
+                  title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded( // Allow the file name to take available space
+                      Expanded(
                         child: Text(
                           file.name,
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                       ),
                       SizedBox(
-                        width: 150, // Set a fixed width for the button
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: uploadedFileIndex == index
-                                ? Color(0xFFF7572D) // Change to the specified orange color for "Re-upload"
-                                : const Color(0xFF0C7C3C), // Green color for "Upload"
-                          ),
-                          onPressed: () => _uploadFile(file.path, index), // Pass the index
-                          child: Text(
-                            uploadedFileIndex == index ? "Sent to Holymicro" : "Send again", // Conditional text
-                            style: TextStyle(
-                              fontFamily: "Roboto",
-                              color: Colors.white,
-                              fontSize: 12,
+                        width: 150,
+                        child: Column(
+                          children: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: encodedFileIndex == index
+                                    ? const Color(0xFFF7572D)
+                                    : const Color(0xFF0C7C3C),
+                              ),
+                              onPressed: () => _encodeFile(file.path, index),
+                              child: Text(
+                                encodedFileIndex == index ? "Encoded" : "Encode",
+                                style: const TextStyle(
+                                  fontFamily: "Roboto",
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (encodedFileIndex == index)
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                ),
+                                onPressed: () {
+                                  _decodeFile();
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => DecodedFileViewer(
+                                        decodedContent: decodedContent ?? '',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  "Decode",
+                                  style: TextStyle(
+                                    fontFamily: "Roboto",
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -157,8 +212,6 @@ class _TxtFileListViewState extends State<TxtFileListView> {
           );
         },
       ),
-
-
     );
   }
 }
@@ -173,10 +226,65 @@ class TextFileViewer extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("File Content"),
+        backgroundColor: const Color(0xFF0C7C3C),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Text(fileContent),
+        child: SingleChildScrollView(
+          child: Text(
+            fileContent,
+            style: const TextStyle(fontSize: 16, fontFamily: "Roboto"),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DecodedFileViewer extends StatelessWidget {
+  final String decodedContent;
+
+  const DecodedFileViewer({super.key, required this.decodedContent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Decoded Content"),
+        backgroundColor: const Color(0xFF0C7C3C),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Text(
+            decodedContent,
+            style: const TextStyle(fontSize: 16, fontFamily: "Roboto"),
+          ),
+        ),
+      ),
+    );
+  }
+}
+class EncodedFileViewer extends StatelessWidget {
+  final String encodedContent;
+
+  const EncodedFileViewer({super.key, required this.encodedContent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Encoded File Content"),
+        backgroundColor: const Color(0xFF0C7C3C),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Text(
+            encodedContent,
+            style: const TextStyle(fontSize: 16, fontFamily: "Roboto"),
+          ),
+        ),
       ),
     );
   }
